@@ -47,10 +47,20 @@ pub fn vertex_shader(vertex: &Vertex, uniforms: &Uniforms) -> Vertex {
     }
 }
 
+/// Función centralizada para determinar el shader del fragmento
 pub fn fragment_shader(fragment: &Fragment, uniforms: &Uniforms) -> Color {
-    // Shader base (puede ser modificado según el planeta actual)
-    //time_based_color_cycling_shader(fragment, uniforms)
-    sun_shader(fragment, uniforms)
+    match uniforms.current_shader {
+        1 => sun_shader(fragment, uniforms), // Sol
+        2 => mars_shader_wrapper(fragment, uniforms), // Marte
+        3 => earth_shader_wrapper(fragment, uniforms), // Tierra
+        4 => jupiter_shader_wrapper(fragment, uniforms), // Júpiter
+        5 => mercury_shader_wrapper(fragment, uniforms), // Mercurio
+        6 => uranus_shader_wrapper(fragment, uniforms), // Urano
+        7 => saturn_shader_wrapper(fragment, uniforms), // Saturno
+        8 => moon_shader_wrapper(fragment, uniforms), // Luna
+        9 => saturn_ring_shader(fragment, uniforms), // Anillos de Saturno
+        _ => Color::new(0, 0, 0), // Shader por defecto (negro)
+    }
 }
 
 pub fn sun_shader(fragment: &Fragment, uniforms: &Uniforms) -> Color {
