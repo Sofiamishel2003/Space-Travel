@@ -1,95 +1,101 @@
-# 3D Planetary Renderer Shaders 🌌
+Aquí tienes un README para tu repositorio de GitHub. Puedes incluir un enlace o un video del funcionamiento del proyecto en el espacio indicado.
 
-Este es un proyecto de renderización gráfica desarrollado en **Rust**, que simula la visualización de planetas del sistema solar junto con sus características visuales, utilizando **shaders** personalizados y técnicas avanzadas de manipulación de vértices y fragmentos. El proyecto también incluye anillos dinámicos y simulaciones de texturas basadas en ruido para crear efectos visuales realistas.
+---
 
-## 🚀 Características
+# Sistema Solar en Rust 🚀🌌
 
-- **Renderización de planetas con shaders personalizados:** Cada planeta tiene un shader único que define su textura, colores y efectos visuales.
-- **Simulación de anillos:** Los anillos de Saturno tienen texturas personalizadas y bordes suaves.
-- **Cámara orbital:** Permite moverse y hacer zoom alrededor de los planetas.
-- **Texturas basadas en ruido:** Se utiliza la librería `FastNoiseLite` para generar patrones complejos.
-- **Modelos OBJ:** Los planetas y anillos son renderizados desde archivos `.obj`.
+Este proyecto simula un sistema solar utilizando gráficos en 3D implementados en Rust. Incluye elementos como planetas, órbitas, una nave espacial y un skybox para crear un entorno inmersivo. El sistema es interactivo y permite visualizar los movimientos orbitales de los planetas, la rotación de la nave espacial, y más.
 
-## 🛠️ Tecnologías utilizadas
+## Características principales
 
-- **Rust**: Lenguaje principal para el desarrollo.
-- **nalgebra_glm**: Librería matemática para manejar transformaciones y vectores 3D.
-- **minifb**: Librería para manejar ventanas y buffers gráficos.
-- **FastNoiseLite**: Generador de ruido para texturas procedurales.
+- **Planetas con órbitas personalizadas**: Cada planeta tiene su propia órbita y velocidad de rotación.
+- **Nave espacial interactiva**: Una nave espacial modelada en 3D que se puede observar desde diferentes ángulos.
+- **Skybox**: Un fondo estelar que enmarca la escena para dar una experiencia inmersiva.
+- **Simulación en tiempo real**: Movimientos fluidos de los planetas y la nave.
+- **Interactividad**: Controles de cámara para explorar el sistema desde diferentes perspectivas.
 
-## 📂 Estructura del proyecto
+## Requisitos
 
-```
-📁 src/
-├── camera.rs         # Manejo de la cámara
-├── color.rs          # Representación de colores y operaciones
-├── fragment.rs       # Manejo de fragmentos en shaders
-├── framebuffer.rs    # Buffer de píxeles para renderización
-├── line.rs           # Renderización de líneas
-├── main.rs           # Punto de entrada del programa
-├── obj.rs            # Carga de modelos OBJ
-├── shaders.rs        # Shaders personalizados para planetas y anillos
-├── triangle.rs       # Renderización de triángulos
-└── vertex.rs         # Manejo de vértices y transformaciones
-```
+Para ejecutar este proyecto, necesitas:
 
-## 🎮 Controles
+- [Rust](https://www.rust-lang.org/) (versión 1.70 o superior)
+- Un sistema operativo compatible (Linux, macOS, o Windows)
+- [Cargo](https://doc.rust-lang.org/cargo/) (gestor de paquetes para Rust)
 
-- **Movimiento de la cámara:**
-  - Flechas izquierda/derecha: Rotar alrededor del planeta.
-  - Flechas arriba/abajo: Mover la cámara en el eje vertical.
-- **Zoom:**
-  - Flecha arriba: Acercar.
-  - Flecha abajo: Alejar.
-- **Cambio de planetas:**
-  - Teclas del `1` al `7`: Cambia entre los planetas disponibles.
+## Instalación y uso
 
-## 🖼️ Galería de planetas
-
-1. **Sol** 🌞
-   - Descripción: Textura dinámica simulando el brillo solar con patrones pulsantes.
-   - ![Planetas (7)](https://github.com/user-attachments/assets/057846fc-d3ab-403d-812c-4fe5a2199e3b)
-
-
-2. **Marte** 🔴
-   - Descripción: Superficie rocosa con tonos rojizos y cráteres.
-   - ![image](https://github.com/user-attachments/assets/e2f2cb67-dbda-4aeb-86ea-c78693bfa897)
-
-3. **Tierra** 🌍
-   - Descripción: Representación con océanos, continentes y animación de nubes.
-
-4. **Júpiter** 🟠
-   - Descripción: Bandas de gases en tonos anaranjados y beige.
-
-5. **Mercurio** ⚪
-   - Descripción: Superficie gris metálico con cráteres.
-   - ![image](https://github.com/user-attachments/assets/2505133a-2d50-4d0e-9e68-0c823fcb5aea)
-
-
-6. **Urano** 🟦
-   - Descripción: Tono azul claro con efectos de atmósfera gaseosa.
-   - ![image](https://github.com/user-attachments/assets/be69fc5e-7b49-463e-8f45-ac026f098d32)
-
-
-7. **Saturno** 🪐
-   - Descripción: Bandas de gases similares a Júpiter con anillos dinámicos.
-   - ![image](https://github.com/user-attachments/assets/580d43e6-3ace-4161-987c-10f46ba9982b)
-
-
-
-## 🔧 Instalación y uso
-
-1. Clona el repositorio:
+1. Clona este repositorio:
    ```bash
-   git clone https://github.com/tu-usuario/planetary-renderer.git
-   cd planetary-renderer
+   git clone <URL-del-repositorio>
+   cd <nombre-del-repositorio>
    ```
 
-2. Compila y ejecuta:
+2. Compila el proyecto:
+   ```bash
+   cargo build
+   ```
+
+3. Ejecuta la simulación:
    ```bash
    cargo run
    ```
 
-3. Disfruta explorando el sistema solar 🌌.
+## Controles
 
+- **Cámara orbital**:
+  - `Flechas izquierda/derecha`: Girar alrededor del sistema solar.
+  - `Flechas arriba/abajo`: Ajustar el ángulo de visión vertical.
+- **Zoom**:
+  - Usa la rueda del ratón o las teclas `+` y `-` para acercarte o alejarte.
+- **Vista cenital**:
+  - Presiona `B` para alternar entre la vista cenital y la perspectiva normal.
+
+## Video de demostración
+
+*Muestra un video del sistema solar en funcionamiento aquí.*
+
+[![Ver video de demostración](URL-del-video)](URL-del-video)
+
+## Archivos clave del proyecto
+
+- **`main.rs`**: Punto de entrada del programa.
+- **`framebuffer.rs`**: Manejo del buffer de renderizado.
+- **`vertex.rs`**: Definición de los vértices para los modelos 3D.
+- **`shaders.rs`**: Sombras y cálculos de iluminación.
+- **`obj.rs`**: Carga y procesamiento de modelos 3D.
+- **`camera.rs`**: Control de la cámara.
+- **`skybox.rs`**: Implementación del skybox.
+- **`triangle.rs`**: Manejo de triángulos para renderizado.
+- **`frustum.rs`**: Cálculo de visibilidad para optimización.
+
+## Estructura del proyecto
+
+```plaintext
+.
+├── src
+│   ├── main.rs
+│   ├── framebuffer.rs
+│   ├── vertex.rs
+│   ├── shaders.rs
+│   ├── obj.rs
+│   ├── camera.rs
+│   ├── skybox.rs
+│   ├── triangle.rs
+│   ├── frustum.rs
+│   └── fragment.rs
+└── assets
+    ├── modelos 3D (.obj)
+    ├── texturas
+    └── skybox
+```
+
+## Créditos
+
+Desarrollado por [Sofía Velásquez](https://github.com/Sofiamishel2003). 
+
+## Licencia
+
+Este proyecto está licenciado bajo la [MIT License](LICENSE).
+
+---
 
