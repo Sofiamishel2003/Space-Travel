@@ -347,8 +347,8 @@ fn main() {
         Vec3::new(15.0, 0.0, 5.0),  // Tierra
         Vec3::new(25.0, -2.0, -7.0), // Marte
         Vec3::new(35.0, 1.0, 10.0), // Júpiter
-        Vec3::new(50.0, 3.0, -5.0), // Saturno
-        Vec3::new(65.0, -1.0, 7.0), // Urano
+        Vec3::new(50.0, 3.0, -5.0), // Urano
+        Vec3::new(65.0, -1.0, 7.0), // Saturno
     ];
     let planet_scales = vec![
         14.0,  // Sol
@@ -356,8 +356,8 @@ fn main() {
         5.0,   // Tierra
         7.0,   // Marte
         8.0,  // Júpiter
-        10.0,   // Saturno
-        12.0,   // Urano
+        10.0,   // Urano
+        12.0,   // Saturno
     ];
         
     let orbital_speeds = vec![
@@ -366,8 +366,8 @@ fn main() {
         0.8,    // Tierra
         0.7,   // Marte
         0.6,   // Júpiter
-        0.5,   // Saturno
-        0.4,   // Urano
+        0.5,   // Urano
+        0.4,   // Saturno
     ];
         
 
@@ -455,8 +455,8 @@ fn main() {
 fn handle_input(window: &Window, camera: &mut Camera, system_center: Vec3, bird_eye_active: &mut bool, app_state: &mut AppState) {
     let movement_speed = 1.0;
     let rotation_speed = PI/25.0;
-    let zoom_speed = 1.5;
-    let min_zoom_distance = 25.0; 
+    let zoom_speed = 20.5;
+    let min_zoom_distance = 100.0; 
 
 
     let scroll = window.get_scroll_wheel();
@@ -505,16 +505,13 @@ fn handle_input(window: &Window, camera: &mut Camera, system_center: Vec3, bird_
         camera.zoom(-zoom_speed, min_zoom_distance);
     }
 
-    // Alternar entre vista aérea y normal
     if window.is_key_pressed(Key::B, minifb::KeyRepeat::No) {
         if *bird_eye_active {
-            // Resetear la cámara a la posición y orientación normal
             camera.eye = Vec3::new(0.0, 80.0, -200.0);
             camera.center = Vec3::new(0.0, 0.0, 0.0);
             camera.up = Vec3::new(0.0, 1.0, 0.0);
             *bird_eye_active = false;
         } else {
-            // Cambiar a vista aérea
             camera.bird_eye_view(system_center, 150.0);
             *bird_eye_active = true;
         }
