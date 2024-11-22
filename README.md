@@ -53,8 +53,7 @@ Para ejecutar este proyecto, necesitas:
 ## Video de demostración
 
 *Muestra un video del sistema solar en funcionamiento aquí.*
-
-[![Ver video de demostración](URL-del-video)](URL-del-video)
+https://github.com/user-attachments/assets/834e63a3-983a-4205-94c3-fdb71ed4a668 
 
 ## Archivos clave del proyecto
 
