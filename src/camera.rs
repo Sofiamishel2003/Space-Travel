@@ -18,19 +18,6 @@ impl Camera {
     }
   }
 
-  pub fn basis_change(&self, vector: &Vec3) -> Vec3 {
-    let forward = (self.center - self.eye).normalize();
-    let right = forward.cross(&self.up).normalize();
-    let up = right.cross(&forward).normalize();
-
-    let rotated = 
-    vector.x * right +
-    vector.y * up +
-    - vector.z * forward;
-
-    rotated.normalize()
-  }
-
   pub fn orbit(&mut self, delta_yaw: f32, delta_pitch: f32) {
     let radius_vector = self.eye - self.center;
     let radius = radius_vector.magnitude();
@@ -53,9 +40,12 @@ impl Camera {
     self.has_changed = true;
   }
 
-  pub fn zoom(&mut self, delta: f32) {
+  pub fn zoom(&mut self, delta: f32, min_distance: f32) {
     let direction = (self.center - self.eye).normalize();
-    self.eye += direction * delta;
+    let new_eye = self.eye + direction * delta;
+    if (self.center - new_eye).magnitude() > min_distance {
+        self.eye = new_eye;
+    }
     self.has_changed = true;
   }
 
@@ -74,13 +64,19 @@ impl Camera {
     self.center = self.eye + final_rotated.normalize() * radius;
     self.has_changed = true;
   }
-
-  pub fn check_if_changed(&mut self) -> bool {
-    if self.has_changed {
-      self.has_changed = false;
-      true
-    } else {
-      false
-    }
+  
+  // Método para cambiar a la vista aérea
+  pub fn bird_eye_view(&mut self, system_center: Vec3, height: f32) {
+    self.center = system_center;  // Centra la cámara sobre el centro del sistema
+    self.eye = Vec3::new(system_center.x, system_center.y + height, system_center.z);  // Posición elevada directamente sobre el centro
+    self.up = Vec3::new(0.0, 0.0, -1.0);  // Ajusta 'up' para mirar hacia abajo
+    self.has_changed = true;
   }
+
+  pub fn prevent_collision(&mut self, planet_pos: Vec3, planet_radius: f32) {
+    let direction = (self.eye - planet_pos).normalize();
+    self.eye = planet_pos + direction * (planet_radius + 25.0); // Un margen de seguridad
+    self.has_changed = true;  // Asumiendo que necesitas ajustar la matriz de vista después de esto
+  }
+
 }
