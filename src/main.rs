@@ -1,9 +1,6 @@
 use nalgebra_glm::{Vec3, Mat4, look_at, perspective};
 use minifb::{Key, Window, WindowOptions};
-use std::f32::consts::PI;
-use crate::color::Color;
-use crate::fragment::Fragment;
-use fastnoise_lite::{FastNoiseLite, NoiseType, FractalType};
+use std::{f32::consts::PI, time::Instant};
 
 mod framebuffer;
 mod triangle;
@@ -13,15 +10,18 @@ mod color;
 mod fragment;
 mod shaders;
 mod camera;
+mod skybox;
 
 use framebuffer::Framebuffer;
 use vertex::Vertex;
 use obj::Obj;
 use camera::Camera;
+use skybox::Skybox; 
 use triangle::triangle;
-use shaders::{vertex_shader,sun_shader, fragment_shader, time_based_color_cycling_shader, mars_shader_wrapper, earth_shader_wrapper
-    ,jupiter_shader_wrapper,mercury_shader_wrapper, uranus_shader_wrapper,saturn_shader_wrapper, saturn_ring_shader,moon_shader_wrapper};
+use shaders::{vertex_shader,sun_shader, fragment_shader};
+use fastnoise_lite::{FastNoiseLite, NoiseType, FractalType};
 
+// Estructuras--------------------------------------------------------------
 pub struct Uniforms {
     model_matrix: Mat4,
     view_matrix: Mat4,
@@ -30,15 +30,27 @@ pub struct Uniforms {
     time: u32,
     noise: FastNoiseLite,
     cloud_noise: FastNoiseLite, 
+    current_shader: u8, 
+}
+struct AppState {
+    last_mouse_pos: Option<(f32, f32)>,
+    bird_eye_active: bool,
 }
 // Noises ---------------------------------------------------------------------------------------------------------
-fn create_noise() -> FastNoiseLite {
-    //create_cloud_noise() 
-    // create_cell_noise()
-    // create_ground_noise()
-    create_sun_noise()
+fn create_noise(current_shader: u8) -> FastNoiseLite {
+    match current_shader  {
+        1 => create_sun_noise(),
+        2 => create_mars_noise(),
+        3 => create_earth_noise(),
+        4 => create_jupiter_noise(),
+        5 => create_mercury_noise(),
+        6 => create_uranus_noise(),
+        7 => create_saturn_noise(),
+        8 => create_moon_noise(),
+        9 => FastNoiseLite::new(),
+        _ => FastNoiseLite::new(),
+    }
 }
-
 fn create_sun_noise() -> FastNoiseLite {
     let mut noise = FastNoiseLite::with_seed(42);
     
@@ -138,8 +150,17 @@ fn create_moon_noise() -> FastNoiseLite {
     noise.set_frequency(Some(3.0));  
     noise
 }
-// View ------------------------------------------------------------------------------------------------------------
-fn create_model_matrix(translation: Vec3, scale: f32, rotation: Vec3, aspect_ratio: f32) -> Mat4 {
+
+fn calculate_orbit_position(time: f32, orbit_speed: f32, orbit_radius: f32) -> Vec3 {
+    let angle = time * orbit_speed;
+    Vec3::new(
+        orbit_radius * angle.cos(),
+        0.0,  // Asumiendo una órbita plana para simplificar
+        orbit_radius * angle.sin()
+    )
+}
+
+fn create_model_matrix(translation: Vec3, scale: f32, rotation: Vec3) -> Mat4 {
     let (sin_x, cos_x) = rotation.x.sin_cos();
     let (sin_y, cos_y) = rotation.y.sin_cos();
     let (sin_z, cos_z) = rotation.z.sin_cos();
@@ -183,7 +204,7 @@ fn create_view_matrix(eye: Vec3, center: Vec3, up: Vec3) -> Mat4 {
 }
 
 fn create_perspective_matrix(window_width: f32, window_height: f32) -> Mat4 {
-    let fov = 70.0 * PI / 180.0; // Aumenta el FOV para visualizar mejor el objeto
+    let fov = 45.0 * PI / 180.0;
     let aspect_ratio = window_width / window_height;
     let near = 0.1;
     let far = 1000.0;
@@ -199,8 +220,92 @@ fn create_viewport_matrix(width: f32, height: f32) -> Mat4 {
         0.0, 0.0, 0.0, 1.0
     )
 }
-// Renders ------------------------------------------------------------------------------------------------------------------------------------------------
-fn render(framebuffer: &mut Framebuffer, uniforms: &Uniforms, vertex_array: &[Vertex], planet_shader: fn(&Fragment, &Uniforms) -> Color) {
+
+fn gaussian_blur(buffer: &mut [u32], width: usize, height: usize, kernel_size: usize, sigma: f32) {
+    let gaussian_kernel = create_gaussian_kernel(kernel_size, sigma);
+    let kernel_sum: f32 = gaussian_kernel.iter().map(|&x| x as f32).sum();
+
+    // Aplicar horizontalmente
+    for y in 0..height {
+        let mut temp_row = vec![0u32; width];
+        for x in 0..width {
+            let mut filtered_pixel = 0f32;
+            for k in 0..gaussian_kernel.len() {
+                let sample_x = x as i32 + k as i32 - (gaussian_kernel.len() / 2) as i32;
+                if sample_x >= 0 && sample_x < width as i32 {
+                    filtered_pixel += buffer[sample_x as usize + y * width] as f32 * gaussian_kernel[k] as f32;
+                }
+            }
+            temp_row[x] = (filtered_pixel / kernel_sum).round() as u32;
+        }
+        buffer[y * width..(y + 1) * width].copy_from_slice(&temp_row);
+    }
+
+    // Aplicar verticalmente
+    for x in 0..width {
+        let mut temp_col = vec![0u32; height];
+        for y in 0..height {
+            let mut filtered_pixel = 0f32;
+            for k in 0..gaussian_kernel.len() {
+                let sample_y = y as i32 + k as i32 - (gaussian_kernel.len() / 2) as i32;
+                if sample_y >= 0 && sample_y < height as i32 {
+                    filtered_pixel += buffer[x + sample_y as usize * width] as f32 * gaussian_kernel[k] as f32;
+                }
+            }
+            temp_col[y] = (filtered_pixel / kernel_sum).round() as u32;
+        }
+        for y in 0..height {
+            buffer[x + y * width] = temp_col[y];
+        }
+    }
+}
+
+// Crear un kernel Gaussiano dinámicamente
+fn create_gaussian_kernel(size: usize, sigma: f32) -> Vec<u32> {
+    let mut kernel = vec![0u32; size];
+    let mean = (size as f32 - 1.0) / 2.0;
+    let coefficient = 1.0 / (2.0 * std::f32::consts::PI * sigma * sigma).sqrt();
+
+    for x in 0..size {
+        let exp_numerator = -((x as f32 - mean) * (x as f32 - mean)) / (2.0 * sigma * sigma);
+        let exp_value = (-exp_numerator).exp();
+        kernel[x] = (coefficient * exp_value * 255.0) as u32;
+    }
+
+    kernel
+}
+
+fn apply_bloom(original: &mut [u32], bloom: &[u32], width: usize, height: usize) {
+    for i in 0..original.len() {
+        let original_color = original[i];
+        let bloom_intensity = bloom[i];
+        if bloom_intensity > 0 {
+            original[i] = blend_bloom(original_color, bloom_intensity);
+        }
+    }
+}
+
+fn blend_bloom(base_color: u32, bloom_intensity: u32) -> u32 {
+    // Factores para el tonemapping y la mezcla de bloom
+    let bloom_strength = 0.8;  // Ajusta esto para controlar la fuerza del efecto de bloom
+    let max_bloom_effect = 1.2;  // Este valor limita cuánto puede influir el bloom
+
+    let r = ((base_color >> 16) & 0xFF) as f32;
+    let g = ((base_color >> 8) & 0xFF) as f32;
+    let b = (base_color & 0xFF) as f32;
+    let bloom = bloom_intensity as f32 * bloom_strength;
+
+    // Calcular nueva intensidad de color con clamping para evitar saturación
+    let new_r = ((r + bloom).min(255.0 * max_bloom_effect)).min(255.0) as u32;
+    let new_g = ((g + bloom).min(255.0 * max_bloom_effect)).min(255.0) as u32;
+    let new_b = ((b + bloom).min(255.0 * max_bloom_effect)).min(255.0) as u32;
+
+    // Recomponer el color
+    (new_r << 16) | (new_g << 8) | new_b
+}
+
+fn render(framebuffer: &mut Framebuffer, uniforms: &Uniforms, vertex_array: &[Vertex], time: u32) {
+    // Vertex Shader Stage
     let mut transformed_vertices = Vec::with_capacity(vertex_array.len());
     for vertex in vertex_array {
         let transformed = vertex_shader(vertex, uniforms);
@@ -222,19 +327,18 @@ fn render(framebuffer: &mut Framebuffer, uniforms: &Uniforms, vertex_array: &[Ve
     for tri in &triangles {
         fragments.extend(triangle(&tri[0], &tri[1], &tri[2]));
     }
-
+    let emission = 0; 
     for fragment in fragments {
         let x = fragment.position.x as usize;
         let y = fragment.position.y as usize;
         if x < framebuffer.width && y < framebuffer.height {
-            let color = planet_shader(&fragment, &uniforms);
+            let color = fragment_shader(&fragment, &uniforms);
             framebuffer.set_current_color(color.to_hex());
-            framebuffer.point(x, y, fragment.depth);
+            framebuffer.point(x, y, fragment.depth, emission); 
         }
     }
 }
 
-// Main -------------------------------------------------------------------------------------------------------------------------------------
 fn main() {
     let window_width = 800;
     let window_height = 600;
@@ -248,7 +352,7 @@ fn main() {
         window_height,
         WindowOptions::default(),
     )
-    .unwrap();
+        .unwrap();
 
     window.set_position(500, 500);
     window.update();
@@ -260,126 +364,186 @@ fn main() {
     let scale = 2.0f32;
 
     let mut camera = Camera::new(
-        Vec3::new(0.0, 0.0, 3.0), // Cámara más cercana
-        Vec3::new(0.0, 0.0, 0.0),
+        Vec3::new(0.0, 5.0, 40.0),
+        Vec3::new(22.5, 0.0, 0.0),
         Vec3::new(0.0, 1.0, 0.0)
     );
-    //planeta
+
+    let mut app_state = AppState {
+        last_mouse_pos: None,
+        bird_eye_active: false,
+    };
     let obj = Obj::load("assets/sphere.obj").expect("Failed to load obj");
-    let vertex_arrays = obj.get_vertex_array();
-    //Anillo 
-    let rings_obj = Obj::load("assets/ring.obj").expect("Failed to load rings.obj");
-    let rings_vertex_arrays = rings_obj.get_vertex_array();
-    println!("Rings loaded with {} vertices", rings_obj.get_vertex_array().len());
+    let moon = Obj::load("assets/sphere.obj").expect("Failed to load obj");
+    let ring_obj = Obj::load("assets/ring.obj").expect("Failed to load ring model");
 
+    let skybox = Skybox::new(5000);
+
+    let vertex_arrays = obj.get_vertex_array(); 
+    let moon_vertex_array = moon.get_vertex_array();
+    let ring_vertex_array = ring_obj.get_vertex_array();
+
+    let mut last_frame_time = Instant::now();
     let mut time = 0;
-    let mut current_planet = 1;
-    while window.is_open() {
-        if window.is_key_down(Key::Escape) {
-            break;
-        }
 
-        time += 1;
+    // Lunas de los planetas rocosos
+    let moon_scale = 1.0; 
+    let moon_distance = 2.5;
+    let moon_orbit_speed = 0.001;
 
-        match window.get_keys().last() {
-            Some(Key::Key1) => current_planet = 1,
-            Some(Key::Key2) => current_planet = 2,
-            Some(Key::Key3) => current_planet = 3,
-            Some(Key::Key4) => current_planet = 4,
-            Some(Key::Key5) => current_planet = 5,
-            Some(Key::Key6) => current_planet = 6,
-            Some(Key::Key7) => current_planet = 7,
-            _ => (),
-        }
+    let projection_matrix = create_perspective_matrix(window_width as f32, window_height as f32);
+    let viewport_matrix = create_viewport_matrix(framebuffer_width as f32, framebuffer_height as f32);
+    let mut uniforms = Uniforms { 
+        model_matrix: Mat4::identity(), 
+        view_matrix: Mat4::identity(), 
+        projection_matrix, 
+        viewport_matrix, 
+        time: 0, 
+        noise: create_noise(1),
+        cloud_noise: create_cloud_noise(),
+        current_shader: 1,
+    };
 
-        handle_input(&window, &mut camera);
+    let planet_positions = vec![
+        Vec3::new(0.0, 0.0, 0.0),   // Sol
+        Vec3::new(8.0, 2.0, -3.0),  // Mercurio
+        Vec3::new(15.0, 0.0, 5.0),  // Tierra
+        Vec3::new(25.0, -2.0, -7.0), // Marte
+        Vec3::new(35.0, 1.0, 10.0), // Júpiter
+        Vec3::new(50.0, 3.0, -5.0), // Saturno
+        Vec3::new(65.0, -1.0, 7.0), // Urano
+    ];
+        let planet_scales = vec![
+        10.0,  // Sol
+        0.5,   // Mercurio
+        1.0,   // Tierra
+        0.6,   // Marte
+        11.0,  // Júpiter
+        9.0,   // Saturno
+        4.0,   // Urano
+    ];
 
-        framebuffer.clear();
-        // Seleccionar el ruido correcto en función del planeta actual
-        let noise = match current_planet {
-            1 => create_sun_noise(),
-            2 => create_mars_noise(),
-            3 => create_earth_noise(),
-            4 => create_jupiter_noise(),
-            5 => create_mercury_noise(),
-            6 => create_uranus_noise(),
-            7 => create_saturn_noise(),  // Add saturn
-            _ => FastNoiseLite::with_seed(0),
-        };
-        let aspect_ratio = window_width as f32 / window_height as f32;
-        let model_matrix = create_model_matrix(translation, scale, rotation, aspect_ratio);
-        let view_matrix = create_view_matrix(camera.eye, camera.center, camera.up);
-        let projection_matrix = create_perspective_matrix(window_width as f32, window_height as f32);
-        let viewport_matrix = create_viewport_matrix(framebuffer_width as f32, framebuffer_height as f32);
-        let mut uniforms = Uniforms { 
-            model_matrix, 
-            view_matrix, 
-            projection_matrix, 
-            viewport_matrix, 
-            time, 
-            noise,
-            cloud_noise: create_cloud_noise()
-        };
+    let orbit_inclinations = vec![
+        0.0,  // Sol
+        0.1,  // Mercurio
+        0.0,  // Tierra
+        0.05, // Marte
+        0.01, // Júpiter
+        0.03, // Saturno
+        0.04, // Urano
+    ];
+        
+    let orbit_speeds = vec![
+            0.0,     // Sol no orbita
+            0.02,    // Mercurio
+            0.01,    // Tierra
+            0.008,   // Marte
+            0.004,   // Júpiter
+            0.003,   // Saturno
+            0.002,   // Urano
+        ];
 
-        let planet_shader = match current_planet {
-            1 => sun_shader,
-            2 => mars_shader_wrapper,
-            3 => earth_shader_wrapper,
-            4 => jupiter_shader_wrapper,
-            5 => mercury_shader_wrapper,
-            6 => uranus_shader_wrapper,
-            7 => saturn_shader_wrapper,
-            _ => time_based_color_cycling_shader,
-        };        
-            render(&mut framebuffer, &uniforms, &vertex_arrays, planet_shader);
-            if current_planet == 3 { 
-                // Calcular y renderizar la luna
-                let moon_scale = 0.35; // Escala de la luna respecto a la Tierra
-                let moon_distance = 1.8; // Distancia de la luna a la Tierra
-                let moon_orbit_speed = 0.5; // Velocidad orbital de la luna
-            
+        let orbit_radii = vec![
+            0.0,   // Sol
+            8.0,   // Mercurio
+            18.0,  // Tierra
+            24.0,  // Marte
+            40.0,  // Júpiter
+            55.0,  // Saturno
+            70.0,  // Urano
+        ];
+
+    let system_center = Vec3::new(0.0, 0.0, 0.0);
+
+    let shaders = vec![1, 2, 3, 4, 5, 6, 7];
+    let mut bird_eye_active = false; 
+
+    while window.is_open() && !window.is_key_down(Key::Escape) {
+        let delta_time = last_frame_time.elapsed();
+        last_frame_time = Instant::now();
+        time += delta_time.as_millis() as u32;
+    
+        handle_input(&window, &mut camera, system_center, &mut bird_eye_active, &mut app_state);        framebuffer.clear();
+
+        skybox.render(&mut framebuffer, &uniforms, camera.eye);
+
+        // Matriz de visión siempre actualizada
+        uniforms.view_matrix = create_view_matrix(camera.eye, camera.center, camera.up);
+        uniforms.time = time as u32;
+
+        for (i, position) in planet_positions.iter().enumerate() {
+            let orbit_angle = time as f32 * orbit_speeds[i];
+            let planet_x = orbit_radii[i] * orbit_angle.cos();
+            let planet_z = orbit_radii[i] * orbit_angle.sin();
+            let orbit_inclination = orbit_inclinations[i] * orbit_angle.sin(); // Opcional: inclinación orbital
+            let planet_position = Vec3::new(planet_x, orbit_inclination, planet_z);
+           
+            let scale = planet_scales[i];
+            let planet_rotation = time as f32 * 0.01; // Ajusta según la velocidad de rotación
+            let rotation = Vec3::new(0.0, planet_rotation, 0.0);
+
+            uniforms.current_shader = shaders[i];  
+            uniforms.model_matrix = create_model_matrix(planet_position, planet_scales[i], rotation);
+            //Luna para el planeta tierra
+            if shaders[i] == 3 {  
+                render(&mut framebuffer, &uniforms, &vertex_arrays, time as u32);
                 let moon_angle = time as f32 * moon_orbit_speed;
                 let moon_x = moon_distance * moon_angle.cos();
                 let moon_z = moon_distance * moon_angle.sin();
+                let moon_translation = Vec3::new(moon_x, 0.0, moon_z) + *position;  
+                uniforms.current_shader = 8;  
+                uniforms.model_matrix = create_model_matrix(moon_translation, moon_scale, Vec3::new(0.0, 0.0, 0.0));
+                render(&mut framebuffer, &uniforms, &moon_vertex_array, time as u32);
             
-                let moon_translation = Vec3::new(moon_x, 0.0, moon_z);
-                let moon_model_matrix = create_model_matrix(
-                        moon_translation,
-                        moon_scale, 
-                        Vec3::new(0.0, 0.0, 0.0),
-                        aspect_ratio,
-                );
-                uniforms.model_matrix = moon_model_matrix;
-            
-                render(&mut framebuffer, &uniforms, &vertex_arrays, moon_shader_wrapper);
+            } 
+            //anillos de saturno
+            else if shaders[i] == 4 {  
+                render(&mut framebuffer, &uniforms, &vertex_arrays, time as u32);
+                let ring_scale = scale * 0.3;
+                uniforms.current_shader = 9;
+                uniforms.model_matrix = create_model_matrix(*position, ring_scale, Vec3::new(0.0, 0.0, 0.0));
+                render(&mut framebuffer, &uniforms, &ring_vertex_array, time as u32);
+            } 
+            else if shaders[i] == 7 {
+                render(&mut framebuffer, &uniforms, &vertex_arrays, time as u32);
+                // Aplicar Gaussian Blur al buffer emisivo
+                let kernel_size = 10; // Tamaño del kernel para un desenfoque más suave y amplio
+                let sigma = 2.5; // Sigma para un buen efecto de bloom
+                gaussian_blur(&mut framebuffer.emissive_buffer, framebuffer.width, framebuffer.height, kernel_size, sigma);
+                // Aplicar Bloom
+                apply_bloom(&mut framebuffer.buffer, &framebuffer.emissive_buffer, framebuffer.width, framebuffer.height);
+            } else {
+                render(&mut framebuffer, &uniforms, &vertex_arrays, time as u32);
             }
-            
-            else if current_planet == 7 {
-                let ring_translation = Vec3::new(0.0, 0.0, 0.1); // Mover anillos hacia adelante
-                uniforms.model_matrix = create_model_matrix(
-                    ring_translation, // Ajustar la posición para evitar solapamiento
-                    0.5,              // Escala ajustada para los anillos
-                    Vec3::new(0.0, PI / 2.0, 0.0), // Rotación sobre el eje Y
-                    aspect_ratio,
-                );
-            
-                render(&mut framebuffer, &uniforms, &rings_vertex_arrays, |fragment, uniforms| {
-                    shaders::saturn_ring_shader(fragment, uniforms)
-                });
-            
-            }
-            
-        window
-            .update_with_buffer(&framebuffer.buffer, framebuffer_width, framebuffer_height)
-            .unwrap();
-    }
+        }
+    
+        framebuffer.set_current_color(0xFFDDDD);
+        window.update_with_buffer(&framebuffer.buffer, framebuffer_width, framebuffer_height).unwrap();
+    }    
 }
 
-fn handle_input(window: &Window, camera: &mut Camera) {
+fn handle_input(window: &Window, camera: &mut Camera, system_center: Vec3, bird_eye_active: &mut bool, app_state: &mut AppState) {
     let movement_speed = 1.0;
-    let rotation_speed = PI / 50.0;
-    let zoom_speed = 0.1;
+    let rotation_speed = PI/50.0;
+    let zoom_speed = 1.5;
+    let min_zoom_distance = 25.0; 
 
+    if let Some((mouse_x, mouse_y)) = window.get_mouse_pos(minifb::MouseMode::Pass) {
+        if let Some((last_x, last_y)) = app_state.last_mouse_pos {
+            let delta_x = mouse_x - last_x;
+            let delta_y = mouse_y - last_y;
+            camera.orbit(delta_x as f32 * rotation_speed, -delta_y as f32 * rotation_speed);
+        }
+        app_state.last_mouse_pos = Some((mouse_x, mouse_y));
+    }
+
+    let scroll = window.get_scroll_wheel();
+    if let Some((_, scroll_y)) = scroll {
+        let delta = scroll_y as f32 * zoom_speed;
+        camera.zoom(delta, min_zoom_distance);
+    }
+
+    //  camera orbit controls
     if window.is_key_down(Key::Left) {
         camera.orbit(rotation_speed, 0.0);
     }
@@ -393,6 +557,7 @@ fn handle_input(window: &Window, camera: &mut Camera) {
         camera.orbit(0.0, rotation_speed);
     }
 
+    // Camera movement controls
     let mut movement = Vec3::new(0.0, 0.0, 0.0);
     if window.is_key_down(Key::A) {
         movement.x -= movement_speed;
@@ -410,11 +575,27 @@ fn handle_input(window: &Window, camera: &mut Camera) {
         camera.move_center(movement);
     }
 
+    // Camera zoom controls
     if window.is_key_down(Key::Up) {
-        camera.zoom(zoom_speed);
+        camera.zoom(zoom_speed, min_zoom_distance);
     }
     if window.is_key_down(Key::Down) {
-        camera.zoom(-zoom_speed);
+        camera.zoom(-zoom_speed, min_zoom_distance);
+    }
+
+    // Alternar entre vista aérea y normal
+     if window.is_key_pressed(Key::B, minifb::KeyRepeat::No) {
+        if *bird_eye_active {
+            // Resetear la cámara a la posición y orientación normal
+            camera.eye = Vec3::new(0.0, 50.0, 40.0);
+            camera.center = Vec3::new(22.5, 0.0, 0.0);
+            camera.up = Vec3::new(0.0, 1.0, 0.0);
+            *bird_eye_active = false;
+        } else {
+            // Cambiar a vista aérea
+            camera.bird_eye_view(system_center, 100.0);
+            *bird_eye_active = true;
+        }
+        camera.has_changed = true;
     }
 }
-
