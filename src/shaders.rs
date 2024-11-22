@@ -59,6 +59,7 @@ pub fn fragment_shader(fragment: &Fragment, uniforms: &Uniforms) -> Color {
         7 => saturn_shader_wrapper(fragment, uniforms), // Saturno
         8 => moon_shader_wrapper(fragment, uniforms), // Luna
         9 => saturn_ring_shader(fragment, uniforms), // Anillos de Saturno
+        10 => spaceship_shader(fragment, uniforms),
         _ => Color::new(0, 0, 0), // Shader por defecto (negro)
     }
 }
@@ -100,7 +101,7 @@ pub fn sun_shader(fragment: &Fragment, uniforms: &Uniforms) -> Color {
   // Use lerp for color blending based on noise value
   let color = dark_color.lerp(&bright_color, noise_value);
 
-  color * fragment.intensity
+  color
 }
 pub fn time_based_color_cycling_shader(fragment: &Fragment, uniforms: &Uniforms) -> Color {
     // Define una lista de colores para cambiar
@@ -119,7 +120,7 @@ pub fn time_based_color_cycling_shader(fragment: &Fragment, uniforms: &Uniforms)
 
     let current_color = colors[color_index];
     let next_color = colors[(color_index + 1) % colors.len()];
-    current_color.lerp(&next_color, transition_progress) * fragment.intensity
+    current_color.lerp(&next_color, transition_progress) 
 }
 
 pub fn mars_shader(fragment: &Fragment, uniforms: &Uniforms) -> Color {
@@ -185,7 +186,7 @@ pub fn mars_shader(fragment: &Fragment, uniforms: &Uniforms) -> Color {
     final_color = final_color * (1.0 - shadow_texture_noise);
 
     // Devolvemos el color final multiplicado por la intensidad del fragmento
-    final_color * fragment.intensity
+    final_color 
 }
 
 
@@ -230,12 +231,8 @@ pub fn earth_shader_wrapper(fragment: &Fragment, uniforms: &Uniforms) -> Color {
 
     // Iluminación difusa (suave) para resaltar la superficie
     let light_position = Vec3::new(1.0, 1.0, 3.0); // Dirección de la luz (sol)
-    let light_dir = normalize(&(light_position - fragment.vertex_position)); // Dirección de la luz
-    let normal = normalize(&fragment.normal); // Normal del fragmento
-    let diffuse = dot(&normal, &light_dir).max(0.0); // Cálculo de la iluminación difusa
-
     // Aplicar el color base con iluminación difusa
-    let lit_color = base_color * (0.1 + 0.9 * diffuse); // Agregar un factor de luz
+    let lit_color = base_color * (0.1 + 0.9 ); // Agregar un factor de luz
 
     // Umbral para las nubes
     let cloud_threshold = 0.1;
@@ -357,8 +354,7 @@ pub fn jupiter_shader_wrapper(fragment: &Fragment, uniforms: &Uniforms) -> Color
 
     final_color = final_color + Vec3::new(1.0, 1.0, 1.0) * specular_intensity * 0.15;
 
-    final_color = final_color * fragment.intensity;
-
+    final_color = final_color; 
     Color::new(
         (final_color.x * 255.0) as u8,
         (final_color.y * 255.0) as u8,
@@ -394,14 +390,8 @@ pub fn uranus_shader(fragment: &Fragment, uniforms: &Uniforms, time: u32) -> (Co
     };
 
     let light_position = Vec3::new(1.0, 1.0, 3.0);
-    let light_dir = (light_position - fragment.vertex_position).normalize();
-    let normal = fragment.normal.normalize();
-    let diffuse = normal.dot(&light_dir).max(0.0);
-    if diffuse.is_nan() || diffuse.is_infinite() {
-        panic!("Diffuse calculation resulted in NaN or infinity!");
-    }
 
-    let lit_color = base_color * (0.1 + 0.9 * diffuse);
+    let lit_color = base_color * (0.1 + 0.9);
 
     let cloud_threshold = 0.1;
     let cloud_opacity = 0.3 + 0.2 * ((time as f32 / 1000.0) * 0.3).sin().abs();
@@ -470,7 +460,7 @@ pub fn saturn_ring_shader(fragment: &Fragment, uniforms: &Uniforms) -> Color {
     let distance_from_center = ring_position.magnitude(); // Distancia radial al centro
 
     let num_bands = 8; // Más bandas para los anillos
-    let max_distance = 1.5; // Tamaño reducido
+    let max_distance = 0.5; // Tamaño reducido
     let band_width = max_distance / num_bands as f32;
 
     let band_index = (distance_from_center / band_width).floor() as i32;
@@ -571,7 +561,7 @@ pub fn mercury_shader_wrapper(fragment: &Fragment, uniforms: &Uniforms) -> Color
     let final_color = final_color * (1.0 + pulsate);
 
     // Devolvemos el color final multiplicado por la intensidad del fragmento
-    final_color * fragment.intensity
+    final_color
 }
 pub fn moon_shader(fragment: &Fragment, uniforms: &Uniforms) -> Color {
     // Colores base para la luna (grises y tonos tierra)
@@ -611,8 +601,49 @@ pub fn moon_shader(fragment: &Fragment, uniforms: &Uniforms) -> Color {
     let final_color = crater_color * (0.3 + 0.7 * diffuse);
 
     // Retornar color final
-    final_color * fragment.intensity
+    final_color
 }
 pub fn moon_shader_wrapper(fragment: &Fragment, uniforms: &Uniforms) -> Color {
     moon_shader(fragment, uniforms)
 }
+
+pub fn spaceship_shader(fragment: &Fragment, uniforms: &Uniforms) -> Color {
+    // Colores base para la luna (grises y tonos tierra)
+    let base_gray = Color::from_float(0.7, 0.7, 0.7); // Gris claro
+    let dark_gray = Color::from_float(0.4, 0.4, 0.4); // Gris oscuro
+    let crater_highlight = Color::from_float(0.8, 0.8, 0.8); // Gris brillante para bordes de cráteres
+
+    // Coordenadas del fragmento
+    let position = fragment.vertex_position;
+    let noise_scale = 50.0; // Escala para el ruido de cráteres
+
+    // Generar ruido para simular cráteres y variaciones de textura
+    let noise_value = uniforms.noise.get_noise_2d(
+        position.x * noise_scale,
+        position.y * noise_scale,
+    );
+
+    let fine_noise = uniforms.noise.get_noise_2d(
+        position.x * noise_scale * 2.0,
+        position.y * noise_scale * 2.0,
+    );
+
+    // Mezclar colores en base al ruido
+    let base_color = base_gray.lerp(&dark_gray, noise_value.clamp(0.0, 1.0));
+
+    // Añadir un efecto de borde brillante en los cráteres
+    let crater_effect = fine_noise.abs().clamp(0.0, 1.0);
+    let crater_color = base_color.lerp(&crater_highlight, crater_effect * 0.5);
+
+    // Iluminación difusa
+    let light_position = Vec3::new(2.0, 2.0, 5.0); // Posición de la luz (el "sol")
+    let light_dir = normalize(&(light_position - fragment.vertex_position));
+    let normal = normalize(&fragment.normal);
+    let diffuse = dot(&normal, &light_dir).max(0.0);
+
+    // Combinar iluminación con color base
+    let final_color = crater_color * (0.3 + 0.7 * diffuse);
+
+    // Retornar color final
+    final_color 
+  }
