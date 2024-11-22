@@ -1,4 +1,4 @@
-use nalgebra_glm::{Vec3, Mat4, look_at, perspective};
+use nalgebra_glm::{Vec3, Vec4, Mat4, look_at, perspective, ortho};
 use minifb::{Key, Window, WindowOptions};
 use std::{f32::consts::PI, time::Instant};
 
@@ -169,7 +169,7 @@ fn create_spaceship_noise() -> FastNoiseLite {
     
     noise
 }
-// Orbit and Model ---------------------------------------------------------------------------------------------------------
+// VIEW ---------------------------------------------------------------------------------------------------------
 fn check_collision(camera_pos: Vec3, planet_pos: Vec3, planet_radius: f32) -> bool {
     let distance = (camera_pos - planet_pos).magnitude();
     distance < (planet_radius + 25.0)  // margen de seguridad
@@ -234,6 +234,69 @@ fn create_viewport_matrix(width: f32, height: f32) -> Mat4 {
         0.0, 0.0, 0.0, 1.0
     )
 }
+// RENDERS  ---------------------------------------------------------------------------------------------------------
+fn render_orbit_lines(
+    framebuffer: &mut Framebuffer,
+    orbit_radius: f32,
+    color: Color,
+    segments: usize,
+    uniforms: &Uniforms,
+) {
+    framebuffer.set_current_color(color.to_hex());
+
+    let orbit_depth = 0.95; // Profundidad para las órbitas, más lejos que los planetas
+
+    for i in 0..segments {
+        let angle1 = 2.0 * PI * (i as f32) / (segments as f32);
+        let angle2 = 2.0 * PI * ((i + 1) as f32) / (segments as f32);
+
+        let world_pos1 = Vec4::new(
+            orbit_radius * angle1.cos(),
+            0.0,
+            orbit_radius * angle1.sin(),
+            1.0,
+        );
+        let world_pos2 = Vec4::new(
+            orbit_radius * angle2.cos(),
+            0.0,
+            orbit_radius * angle2.sin(),
+            1.0,
+        );
+
+        let clip_pos1 = uniforms.projection_matrix * uniforms.view_matrix * world_pos1;
+        let clip_pos2 = uniforms.projection_matrix * uniforms.view_matrix * world_pos2;
+
+        let ndc_pos1 = Vec3::new(
+            clip_pos1.x / clip_pos1.w,
+            clip_pos1.y / clip_pos1.w,
+            orbit_depth,
+        );
+        let ndc_pos2 = Vec3::new(
+            clip_pos2.x / clip_pos2.w,
+            clip_pos2.y / clip_pos2.w,
+            orbit_depth,
+        );
+
+        let screen_pos1 =
+            uniforms.viewport_matrix * Vec4::new(ndc_pos1.x, ndc_pos1.y, ndc_pos1.z, 1.0);
+        let screen_pos2 =
+            uniforms.viewport_matrix * Vec4::new(ndc_pos2.x, ndc_pos2.y, ndc_pos2.z, 1.0);
+
+        let screen_x1 = screen_pos1.x as usize;
+        let screen_y1 = screen_pos1.y as usize;
+        let screen_x2 = screen_pos2.x as usize;
+        let screen_y2 = screen_pos2.y as usize;
+
+        if screen_x1 < framebuffer.width
+            && screen_y1 < framebuffer.height
+            && screen_x2 < framebuffer.width
+            && screen_y2 < framebuffer.height
+        {
+            framebuffer.line_with_depth(screen_x1, screen_y1, screen_x2, screen_y2, orbit_depth);
+        }
+    }
+}
+
 
 
 fn render(framebuffer: &mut Framebuffer, uniforms: &Uniforms, vertex_array: &[Vertex], time: u32, disable_culling: bool) {
@@ -343,7 +406,7 @@ fn main() {
 
     let planet_positions = vec![
         Vec3::new(0.0, 0.0, 0.0),   // Sol
-        Vec3::new(8.0, 2.0, -3.0),  // Mercurio
+        Vec3::new(10.0, 2.0, -3.0),  // Mercurio
         Vec3::new(15.0, 0.0, 5.0),  // Tierra
         Vec3::new(25.0, -2.0, -7.0), // Marte
         Vec3::new(35.0, 1.0, 10.0), // Júpiter
@@ -405,14 +468,20 @@ fn main() {
         // Matriz de visión siempre actualizada
         uniforms.view_matrix = create_view_matrix(camera.eye, camera.center, camera.up);
         uniforms.time = time as u32;
-
+        for (i, o_pos) in planet_positions.iter().enumerate() {
+            let orbit_radius = o_pos.x;
+            orbital_angles[i] += orbital_speeds[i] * delta_time.as_secs_f32();
+        
+            // Renderizar órbitas (con profundidad lejana)
+            let orbit_color = Color::new(100, 100, 100); // Gris más oscuro
+            render_orbit_lines(&mut framebuffer, orbit_radius, orbit_color, 100, &uniforms);
+        }        
         for (i, o_pos) in planet_positions.iter().enumerate() {
             let orbit_radius = o_pos.x;  
             orbital_angles[i] += orbital_speeds[i] * delta_time.as_secs_f32(); // Asumiendo que orbital_speeds está definido
             let planet_x = orbit_radius * orbital_angles[i].cos();
             let planet_z = orbit_radius * orbital_angles[i].sin();
             let position = Vec3::new(planet_x, 0.0, planet_z); // Asumiendo una órbita plana en el plano xz
-
             let scale = planet_scales[i]; 
             if frustum.contains(position, scale) {
                 uniforms.current_shader = shaders[i];
@@ -441,7 +510,7 @@ fn main() {
         }
         uniforms.projection_matrix = hud_camera_projection;
         uniforms.view_matrix = Mat4::identity();
-        uniforms.model_matrix = create_model_matrix(Vec3::new(window_width as f32 / 2.0, window_height as f32 - 100.0, 0.0), 15.0, Vec3::new(0.0, 0.0, 0.0));
+        uniforms.model_matrix = create_model_matrix(Vec3::new(window_width as f32 / 2.0, window_height as f32 - 100.0, 0.0), 15.0, Vec3::new(PI, 0.0, 0.0));
 
         uniforms.current_shader = 10;
         render(&mut framebuffer, &uniforms, &spaceship_vertex_array, time as u32, false);

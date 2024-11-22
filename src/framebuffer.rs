@@ -53,4 +53,39 @@ impl Framebuffer {
     pub fn set_current_color(&mut self, color: u32) {
         self.current_color = color;
     }
+    pub fn line_with_depth(&mut self, x0: usize, y0: usize, x1: usize, y1: usize, depth: f32) {
+        let mut x0 = x0 as isize;
+        let mut y0 = y0 as isize;
+        let x1 = x1 as isize;
+        let y1 = y1 as isize;
+
+        let dx = (x1 - x0).abs();
+        let dy = (y1 - y0).abs();
+        let sx = if x0 < x1 { 1 } else { -1 };
+        let sy = if y0 < y1 { 1 } else { -1 };
+        let mut err = dx - dy;
+
+        loop {
+            if x0 >= 0 && x0 < self.width as isize && y0 >= 0 && y0 < self.height as isize {
+                let index = y0 as usize * self.width + x0 as usize;
+                if self.zbuffer[index] > depth {
+                    self.point(x0 as usize, y0 as usize, depth, 0);
+                }
+            }
+
+            if x0 == x1 && y0 == y1 {
+                break;
+            }
+
+            let e2 = 2 * err;
+            if e2 > -dy {
+                err -= dy;
+                x0 += sx;
+            }
+            if e2 < dx {
+                err += dx;
+                y0 += sy;
+            }
+        }
+    }
 }
